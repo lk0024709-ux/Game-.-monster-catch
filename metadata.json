@@ -1,0 +1,6 @@
+{
+  "name": "Mythicmons Legends",
+  "description": "Offline Creature Collection RPG and Turn-Based Battle Game with deep procedural combat, fully customizable teams, and interactive biome exploration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
