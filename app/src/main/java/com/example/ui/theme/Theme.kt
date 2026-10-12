@@ -1,52 +1,91 @@
 package com.example.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme =
-  darkColorScheme(primary = Purple80, secondary = PurpleGrey80, tertiary = Pink80)
+private val LocalRannColors = staticCompositionLocalOf { LightRannColors }
 
-private val LightColorScheme =
-  lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40,
+/** Access point for theme tokens: `RannTheme.colors.surface` etc. */
+object RannTheme {
+    val colors: RannColors
+        @Composable @ReadOnlyComposable get() = LocalRannColors.current
+}
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+private val LightScheme = lightColorScheme(
+    primary = Rann.Primary,
     onPrimary = Color.White,
+    primaryContainer = Rann.GoldSoft,
+    onPrimaryContainer = Rann.TextPrimary,
+    secondary = Rann.Secondary,
     onSecondary = Color.White,
+    tertiary = Rann.Accent,
     onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-  )
+    background = Rann.Cream,
+    onBackground = Rann.TextPrimary,
+    surface = Rann.Surface,
+    onSurface = Rann.TextPrimary,
+    surfaceVariant = Rann.SurfaceAlt,
+    onSurfaceVariant = Rann.TextMuted,
+    outline = Rann.Border,
+    error = Rann.Danger,
+    onError = Color.White,
+)
 
+private val DarkScheme = darkColorScheme(
+    primary = Rann.Primary,
+    onPrimary = Color.White,
+    primaryContainer = Rann.DarkSurfaceAlt,
+    onPrimaryContainer = Rann.DarkText,
+    secondary = Rann.Secondary,
+    onSecondary = Color.White,
+    tertiary = Rann.Accent,
+    onTertiary = Color.White,
+    background = Rann.DarkBg,
+    onBackground = Rann.DarkText,
+    surface = Rann.DarkSurface,
+    onSurface = Rann.DarkText,
+    surfaceVariant = Rann.DarkSurfaceAlt,
+    onSurfaceVariant = Rann.DarkTextMuted,
+    outline = Rann.DarkBorder,
+    error = Rann.Danger,
+    onError = Color.White,
+)
+
+/**
+ * Root theme. Static colour schemes only (no dynamic colour) so the
+ * premium warm palette is identical on every device.
+ *
+ * [forceDark] is used by Elite Mode to switch to the exclusive dark palette,
+ * independent of the system setting.
+ */
 @Composable
-fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
-  content: @Composable () -> Unit,
+fun RannbhoomiTheme(
+    forceDark: Boolean? = null,
+    content: @Composable () -> Unit,
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
+    val dark = forceDark ?: isSystemInDarkTheme()
+    val tokens = if (dark) DarkRannColors else LightRannColors
+    CompositionLocalProvider(LocalRannColors provides tokens) {
+        MaterialTheme(
+            colorScheme = if (dark) DarkScheme else LightScheme,
+            typography = Typography,
+            content = content,
+        )
     }
+}
 
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+/**
+ * Compatibility entry point kept for the original screenshot test and any
+ * legacy screens that still call the old name.
+ */
+@Composable
+fun MyApplicationTheme(content: @Composable () -> Unit) {
+    RannbhoomiTheme(content = content)
 }

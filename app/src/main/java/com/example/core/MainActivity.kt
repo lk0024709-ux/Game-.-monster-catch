@@ -1,70 +1,77 @@
 package com.example.core
 
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.game.AssetRepository
-import com.example.game.SoundEffectsManager
-import com.example.ui.components.CreatureRenderer
-import com.example.ui.screens.*
-import com.example.ui.theme.MyApplicationTheme
-import com.example.ui.viewmodel.GameState
-import com.example.ui.viewmodel.GameViewModel
+import com.example.rann.audio.Sound
+import com.example.rann.ui.PrimaryButton
+import com.example.rann.ui.RannCard
+import com.example.rann.ui.SecondaryButton
+import com.example.rann.ui.screens.BattleScreen
+import com.example.rann.ui.screens.EliteScreen
+import com.example.rann.ui.screens.HomeScreen
+import com.example.rann.ui.screens.LevelsScreen
+import com.example.rann.ui.screens.SettingsScreen
+import com.example.rann.ui.screens.SplashScreen
+import com.example.rann.ui.screens.StoreScreen
+import com.example.rann.vm.AppScreen
+import com.example.rann.vm.RannViewModel
+import com.example.ui.theme.RannText
+import com.example.ui.theme.RannTheme
+import com.example.ui.theme.RannbhoomiTheme
+import kotlinx.coroutines.delay
 
-// ======================================================
-// MAIN ACTIVITY
-// ======================================================
-
+/**
+ * Blade Brawl: Rannbhoomi — single activity, canvas-driven battle royale RPG.
+ * Elite battles run on the exclusive dark palette; everything else is the warm
+ * editorial light theme.
+ */
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: GameViewModel by viewModels()
+    private val vm: RannViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        SoundEffectsManager.initialize(this)
-
+        Sound.init(this)
         setContent {
-            MyApplicationTheme {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize()
-                ) { innerPadding ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding)
-                    ) {
-                        SafeGameContent {
-                            GameNavigation(viewModel)
-                        }
-                    }
+            val dark = vm.screen == AppScreen.BATTLE && (vm.battle?.isElite ?: false)
+            RannbhoomiTheme(forceDark = dark) {
+                Box(Modifier.fillMaxSize()) {
+                    RannNavigation(vm)
+                    ToastHost(vm)
+                    OfflineForgeNotice(vm)
                 }
             }
         }
@@ -72,241 +79,112 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        SoundEffectsManager.release()
-        AssetRepository.clear()
+        Sound.release()
     }
 }
 
-// ======================================================
-// SAFE COMPOSABLE WRAPPER
-// ======================================================
-
 @Composable
-fun SafeGameContent(
-    content: @Composable () -> Unit
-) {
-    content()
+fun RannNavigation(vm: RannViewModel) {
+    AnimatedContent(
+        targetState = vm.screen,
+        transitionSpec = { fadeIn() togetherWith fadeOut() },
+        label = "rann_navigation",
+    ) { screen ->
+        when (screen) {
+            AppScreen.SPLASH -> SplashScreen(vm)
+            AppScreen.HOME -> HomeScreen(vm)
+            AppScreen.LEVELS -> LevelsScreen(vm)
+            AppScreen.ELITE -> EliteScreen(vm)
+            AppScreen.STORE -> StoreScreen(vm)
+            AppScreen.SETTINGS -> SettingsScreen(vm)
+            AppScreen.BATTLE -> BattleScreen(vm)
+        }
+    }
 }
 
-// ======================================================
-// NAVIGATION
-// ======================================================
-
+/** Transient messages queued by the view model. */
 @Composable
-fun GameNavigation(
-    viewModel: GameViewModel
-) {
-    val state by viewModel.gameState.collectAsStateWithLifecycle()
-
-    AnimatedContent(
-        targetState = state,
-        transitionSpec = {
-            fadeIn() togetherWith fadeOut()
-        },
-        label = "game_navigation"
-    ) { current ->
-        when (current) {
-            GameState.SPLASH -> SplashAdventureEntryScreen(
-                onEnterSaves = {
-                    viewModel.setGameState(GameState.MENU)
-                },
-                onEnterAssetForge = {
-                    viewModel.setGameState(GameState.SETTINGS)
-                }
-            )
-
-            GameState.MENU -> SaveSlotsView(
-                viewModel = viewModel,
-                onBack = {
-                    viewModel.setGameState(GameState.SPLASH)
-                }
-            )
-
-            GameState.WORLD -> WorldMapView(
-                viewModel = viewModel
-            )
-
-            GameState.BATTLE -> BattleArenaView(
-                viewModel = viewModel
-            )
-
-            GameState.INVENTORY -> SquadDexView(
-                viewModel = viewModel,
-                initialTab = viewModel.inventoryInitialTab,
-                onClose = {
-                    viewModel.setGameState(GameState.WORLD)
-                }
-            )
-
-            GameState.SETTINGS -> AssetForgeView(
-                viewModel = viewModel,
-                onClose = {
-                    viewModel.setGameState(GameState.SPLASH)
-                }
+private fun ToastHost(vm: RannViewModel) {
+    val message = vm.toasts.firstOrNull() ?: return
+    LaunchedEffect(message, vm.toasts.size) {
+        delay(1900)
+        vm.consumeToast()
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+            .padding(bottom = 96.dp),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(horizontal = 24.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color(0xE61C1917))
+                .padding(horizontal = 18.dp, vertical = 10.dp),
+        ) {
+            Text(
+                text = message,
+                style = RannText.bodySmall,
+                color = Color(0xFFF5F5F4),
             )
         }
     }
 }
 
-// ======================================================
-// SPLASH INTRO SCREEN
-// ======================================================
-
+/** The furnace keeps working while the app is closed — tell the player what it made. */
 @Composable
-fun SplashAdventureEntryScreen(
-    onEnterSaves: () -> Unit,
-    onEnterAssetForge: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+private fun OfflineForgeNotice(vm: RannViewModel) {
+    var shown by remember { mutableStateOf(false) }
+    val pending = vm.offlineForged
+    if (shown || pending <= 0) return
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF0C071C), Color(0xFF241445), Color(0xFF0A0518))
-                )
-            )
+            .background(Color(0x99000000))
             .statusBarsPadding()
             .navigationBarsPadding()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Game branding subtitle
-            Text(
-                text = "OFFLINE RPG SIMULATOR",
-                color = Color.White.copy(alpha = 0.5f),
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 2.sp,
-                modifier = Modifier.padding(top = 16.dp)
-            )
-
-            // Dynamic Title text styled creatively
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "MYTHICMONS",
-                    color = Color(0xFFFFD700),
-                    fontSize = 38.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 4.sp,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = "LEGENDS",
-                    color = Color.White,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 8.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            // Splash mascot renderer (showing the cute fire mascot Pyrofox!)
-            Box(
-                modifier = Modifier
-                    .size(175.dp)
-                    .background(Color(0xFFFF5722).copy(alpha = 0.08f), RoundedCornerShape(32.dp))
-                    .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.15f), RoundedCornerShape(32.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                CreatureRenderer(
-                    speciesId = "pyrofox",
-                    isShiny = false,
-                    scale = 1.2f,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            // Launch Button card
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .height(56.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFFE040FB), Color(0xFF673AB7))
-                            )
-                        )
-                        .clickable {
-                            SoundEffectsManager.playLevelUp()
-                            onEnterSaves()
-                        }
-                        .testTag("splash_start_button"),
-                    colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = "Play", tint = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
+        RannCard(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth()) {
+                Column {
+                        Text("🔥", style = RannText.display)
+                        Spacer(Modifier.height(10.dp))
                         Text(
-                            text = "START CAMPAIGN",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
+                            text = "The furnace kept working",
+                            style = RannText.h2,
+                            color = RannTheme.colors.textPrimary,
                         )
-                    }
-                }
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .height(56.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFF00FF7F), Color(0xFF00E5FF))
-                            )
-                        )
-                        .clickable {
-                            SoundEffectsManager.playLevelUp()
-                            onEnterAssetForge()
-                        }
-                        .testTag("splash_asset_forge_button"),
-                    colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Filled.Build, contentDescription = "Asset Forge", tint = Color.Black)
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "ASSET FORGE & VFX",
-                            color = Color.Black,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
+                            text = "$pending dagger${if (pending == 1) "" else "s"} were smelted while you were away. " +
+                                "Merge them into something heavier.",
+                            style = RannText.body,
+                            color = RannTheme.colors.textMuted,
                         )
-                    }
                 }
-
-                Text(
-                    text = "Version 1.0.0 • No Internet Required • Made with 100% Original Lore",
-                    color = Color.White.copy(alpha = 0.4f),
-                    fontSize = 10.sp,
-                    textAlign = TextAlign.Center
-                )
+                Spacer(Modifier.height(18.dp))
+                Row {
+                    SecondaryButton(
+                        text = "Later",
+                        modifier = Modifier.weight(1f),
+                        onClick = { shown = true },
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    PrimaryButton(
+                        text = "Open Forge",
+                        icon = "🧩",
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            shown = true
+                            vm.levelsTab = 1
+                            vm.screen = AppScreen.LEVELS
+                        },
+                    )
+                }
             }
         }
     }
