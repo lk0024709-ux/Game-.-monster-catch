@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -87,6 +88,10 @@ private fun BattleHost(vm: RannViewModel, request: BattleRequest) {
     var result by remember(request) { mutableStateOf<GradeResult?>(null) }
     var frame by remember(request) { mutableFloatStateOf(0f) }
     var showHint by remember(request) { mutableStateOf(true) }
+    // The HUD reads plain (non-snapshot) simulation fields, so nudge the
+    // composition ~10x per second while the canvas redraws every frame.
+    var hudTick by remember(request) { mutableIntStateOf(0) }
+    val hudAccum = remember(request) { floatArrayOf(0f) }
 
     // ---------------- frame loop ----------------
     LaunchedEffect(sim) {
@@ -108,6 +113,11 @@ private fun BattleHost(vm: RannViewModel, request: BattleRequest) {
                     shakeEnabled = vm.profile.settings.screenShake,
                     frame = frame,
                 )
+                hudAccum[0] += dt
+                if (hudAccum[0] >= 0.1f) {
+                    hudAccum[0] = 0f
+                    hudTick++
+                }
                 if (time > 6f) showHint = false
                 if (sim.state != BattleState.RUNNING && result == null && sim.outcomeTimer > 0.9f) {
                     result = vm.completeBattle(sim)
@@ -149,9 +159,9 @@ private fun BattleHost(vm: RannViewModel, request: BattleRequest) {
                 .padding(horizontal = 14.dp),
         ) {
             Spacer(Modifier.height(8.dp))
-            BattleTopBar(sim = sim, mapName = request.mapName)
+            BattleTopBar(sim = sim, mapName = request.mapName, tick = hudTick)
             Spacer(Modifier.height(6.dp))
-            BossBar(sim)
+            BossBar(sim = sim, tick = hudTick)
             StatusStrip(sim)
             Spacer(Modifier.weight(1f))
             BottomStrip(sim, request)
@@ -376,9 +386,11 @@ private fun ControlsLayer(
 // ======================================================
 
 @Composable
-private fun BattleTopBar(sim: BattleSim, mapName: String) {
+private fun BattleTopBar(sim: BattleSim, mapName: String, tick: Int) {
     val c = RannTheme.colors
     val hp = sim.player.hpFraction
+    val critical = hp < 0.3f
+    val pulse = critical && tick % 2 == 0
     Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -424,11 +436,13 @@ private fun BattleTopBar(sim: BattleSim, mapName: String) {
                         .height(14.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .background(
-                            when {
-                                hp > 0.55f -> Rann.Success
-                                hp > 0.28f -> Rann.Gold
-                                else -> Rann.Danger
-                            }
+                            (
+                                when {
+                                    hp > 0.55f -> Rann.Success
+                                    hp > 0.28f -> Rann.Gold
+                                    else -> Rann.Danger
+                                }
+                                ).copy(alpha = if (pulse) 0.55f else 1f),
                         ),
                 )
             }
@@ -453,7 +467,7 @@ private fun BattleTopBar(sim: BattleSim, mapName: String) {
 }
 
 @Composable
-private fun BossBar(sim: BattleSim) {
+private fun BossBar(sim: BattleSim, tick: Int) {
     val boss = sim.npcs.firstOrNull { it.boss != null && it.alive }
     val chimera = sim.chimera
     val show = boss != null || (chimera != null && chimera.alive)
@@ -473,9 +487,13 @@ private fun BossBar(sim: BattleSim) {
                 Text(name, style = RannText.buttonSmall, color = Color(0xFFF5F5F4))
                 Spacer(Modifier.weight(1f))
                 Text(
-                    text = if (phase > 1) "Phase $phase" else "${frac * 100f}".take(4) + "%",
+                    text = when {
+                        phase > 1 -> "Phase $phase · ${(frac * 100f).toInt()}%"
+                        frac < 0.25f && tick % 2 == 0 -> "FINISH IT"
+                        else -> "${(frac * 100f).toInt()}%"
+                    },
                     style = RannText.label,
-                    color = Rann.GoldSoft,
+                    color = if (phase > 1) Rann.Danger else Rann.GoldSoft,
                 )
             }
             Spacer(Modifier.height(5.dp))
